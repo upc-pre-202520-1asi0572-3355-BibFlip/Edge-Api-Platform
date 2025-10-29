@@ -42,10 +42,9 @@ def get_device_service() -> DeviceService:
 router = APIRouter(prefix="/api/v1/devices", tags=["IoT Device Monitoring"])
 
 
-# ==================== CRITICAL: POST must be BEFORE GET / ====================
-# FastAPI matches routes in order. If GET / comes first, it catches everything
-
-@router.post("/", response_model=DeviceResponse, status_code=201)
+# ==================== EXPLICIT REGISTER ROUTE ====================
+# Usando /register en lugar de / para evitar conflictos
+@router.post("/register", response_model=DeviceResponse, status_code=201)
 async def register_device(
         request: RegisterDeviceRequest,
         service: DeviceService = Depends(get_device_service)
