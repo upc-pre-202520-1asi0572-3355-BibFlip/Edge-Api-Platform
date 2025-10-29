@@ -42,6 +42,9 @@ def get_device_service() -> DeviceService:
 router = APIRouter(prefix="/api/v1/devices", tags=["IoT Device Monitoring"])
 
 
+# ==================== CRITICAL: POST must be BEFORE GET / ====================
+# FastAPI matches routes in order. If GET / comes first, it catches everything
+
 @router.post("/", response_model=DeviceResponse, status_code=201)
 async def register_device(
         request: RegisterDeviceRequest,
@@ -61,49 +64,7 @@ async def register_device(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/{device_id}/readings", response_model=DeviceResponse)
-async def update_device_reading(
-        device_id: str,
-        request: UpdateReadingRequest,
-        service: DeviceService = Depends(get_device_service)
-):
-    """Update device reading (used by ESP32)"""
-    try:
-        device = await service.update_device_reading(
-            device_id=device_id,
-            pressure=request.pressure,
-            threshold=request.threshold
-        )
-        return DeviceResponse(**device.to_dict())
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.get("/{device_id}", response_model=DeviceResponse)
-async def get_device(
-        device_id: str,
-        service: DeviceService = Depends(get_device_service)
-):
-    """Get device information by ID"""
-    device = await service.get_device(device_id)
-    if not device:
-        raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
-    return DeviceResponse(**device.to_dict())
-
-
-@router.get("/", response_model=List[DeviceResponse])
-async def get_all_devices(
-        branch_id: Optional[str] = Query(None, description="Filter by branch ID"),
-        service: DeviceService = Depends(get_device_service)
-):
-    """Get all devices or filter by branch"""
-    if branch_id:
-        devices = await service.get_devices_by_branch(branch_id)
-    else:
-        devices = await service.get_all_devices()
-
-    return [DeviceResponse(**d.to_dict()) for d in devices]
-
+# ==================== Specific routes BEFORE generic ones ====================
 
 @router.get("/status/available", response_model=List[DeviceResponse])
 async def get_available_devices(
@@ -135,6 +96,38 @@ async def check_offline_devices(
     return [DeviceResponse(**d.to_dict()) for d in devices]
 
 
+# ==================== Path parameter routes ====================
+
+@router.post("/{device_id}/readings", response_model=DeviceResponse)
+async def update_device_reading(
+        device_id: str,
+        request: UpdateReadingRequest,
+        service: DeviceService = Depends(get_device_service)
+):
+    """Update device reading (used by ESP32)"""
+    try:
+        device = await service.update_device_reading(
+            device_id=device_id,
+            pressure=request.pressure,
+            threshold=request.threshold
+        )
+        return DeviceResponse(**device.to_dict())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{device_id}", response_model=DeviceResponse)
+async def get_device(
+        device_id: str,
+        service: DeviceService = Depends(get_device_service)
+):
+    """Get device information by ID"""
+    device = await service.get_device(device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
+    return DeviceResponse(**device.to_dict())
+
+
 @router.delete("/{device_id}", status_code=204)
 async def delete_device(
         device_id: str,
@@ -145,3 +138,19 @@ async def delete_device(
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
     return None
+
+
+# ==================== Generic list route LAST ====================
+
+@router.get("/", response_model=List[DeviceResponse])
+async def get_all_devices(
+        branch_id: Optional[str] = Query(None, description="Filter by branch ID"),
+        service: DeviceService = Depends(get_device_service)
+):
+    """Get all devices or filter by branch"""
+    if branch_id:
+        devices = await service.get_devices_by_branch(branch_id)
+    else:
+        devices = await service.get_all_devices()
+
+    return [DeviceResponse(**d.to_dict()) for d in devices]
