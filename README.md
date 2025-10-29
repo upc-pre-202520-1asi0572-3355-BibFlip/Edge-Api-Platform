@@ -2,6 +2,12 @@
 
 Edge API para el Bounded Context de **IoT Device Monitoring** usando Domain-Driven Design (DDD) con Python y FastAPI.
 
+## 🌐 Documentación en Línea
+
+- Swagger UI: https://bibflip-edge-api-platform.azurewebsites.net/api/docs
+
+- ReDoc: https://bibflip-edge-api-platform.azurewebsites.net/api/redoc
+
 ## 🏗️ Arquitectura DDD
 
 ```
@@ -132,29 +138,6 @@ Esta Edge API puede sincronizarse con el backend principal:
 # - Message broker: RabbitMQ, Kafka, etc.
 ```
 
-## 🎯 Ventajas de esta Arquitectura
-
-- ✅ **DDD puro**: Separación clara de capas
-- ✅ **Lightweight**: Ideal para dispositivos Edge
-- ✅ **Testeable**: Cada capa se puede probar independientemente
-- ✅ **Extensible**: Fácil agregar persistencia real o event sourcing
-- ✅ **RESTful**: API estándar para integración con ESP32 y frontend
-
-## 📊 Modelo de Dominio
-
-```
-Device (Aggregate Root)
-├── DeviceId (Value Object)
-├── DeviceType (Enum)
-├── DeviceStatus (Enum)
-├── Location (Value Object)
-├── PressureReading (Value Object)
-└── Methods:
-    ├── update_reading()
-    ├── mark_offline()
-    └── mark_error()
-```
-
 ## 🔐 Próximas Mejoras
 
 - [ ] Agregar autenticación JWT
@@ -168,3 +151,5 @@ Device (Aggregate Root)
 
 **Bounded Context**: IoT Device Monitoring  
 **Lenguaje Ubicuo**: Device, Sensor, Reading, Pressure, Occupied, Available, Branch, Zone
+
+
