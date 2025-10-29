@@ -41,5 +41,11 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))  # Puerto dinámico para Render
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Azure Web App usa la variable de entorno PORT o por defecto 8000
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(
+        "main:app",  # Formato "module:app" para Azure
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )
