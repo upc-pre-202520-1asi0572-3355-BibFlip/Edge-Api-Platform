@@ -7,6 +7,8 @@ Edge API para el Bounded Context de **IoT Device Monitoring** usando Domain-Driv
 - Swagger UI: https://bibflip-edge-api-platform.azurewebsites.net/api/docs
 
 - ReDoc: https://bibflip-edge-api-platform.azurewebsites.net/api/redoc
+  
+- ESP32 communication simulated for sending data: https://wokwi.com/projects/446107411757389825
 
 ## 🏗️ Arquitectura DDD
 
