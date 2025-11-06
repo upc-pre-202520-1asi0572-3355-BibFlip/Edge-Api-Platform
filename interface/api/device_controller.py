@@ -4,6 +4,9 @@ from typing import List, Optional
 from application.device_service import DeviceService
 from domain.repository.device_repository import DeviceRepository
 from infrastructure.persistence.in_memory_device_repository import InMemoryDeviceRepository
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # DTOs (Data Transfer Objects)
@@ -29,12 +32,32 @@ class DeviceResponse(BaseModel):
     last_update: str
 
 
+class HealthResponse(BaseModel):
+    edge_api: str
+    backend: str
+    backend_reachable: bool
+
+
 # Dependency Injection
 _repository: DeviceRepository = InMemoryDeviceRepository()
-_service: DeviceService = DeviceService(_repository)
+_backend_url: Optional[str] = None
+_service: Optional[DeviceService] = None
+
+
+def set_backend_url(url: str):
+    """Configure backend URL for service"""
+    global _backend_url, _service
+    _backend_url = url
+    _service = DeviceService(_repository, backend_url=url)
+    logger.info(f"Device service configured with backend: {url}")
 
 
 def get_device_service() -> DeviceService:
+    if _service is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Device service not initialized. Backend URL not configured."
+        )
     return _service
 
 
@@ -42,15 +65,18 @@ def get_device_service() -> DeviceService:
 router = APIRouter(prefix="/api/v1/devices", tags=["IoT Device Monitoring"])
 
 
-# ==================== EXPLICIT REGISTER ROUTE ====================
-# Usando /register en lugar de / para evitar conflictos
 @router.post("/register", response_model=DeviceResponse, status_code=201)
 async def register_device(
         request: RegisterDeviceRequest,
         service: DeviceService = Depends(get_device_service)
 ):
-    """Register a new IoT device in the system"""
+    """
+    Register a new IoT device in Edge API and sync with backend.
+    The device will be stored in-memory and sent to backend asynchronously.
+    """
     try:
+        logger.info(f"Registering device: {request.device_id}")
+
         device = await service.register_device(
             device_id=request.device_id,
             device_type=request.device_type,
@@ -58,19 +84,54 @@ async def register_device(
             zone=request.zone,
             position=request.position
         )
+
+        logger.info(f"Device {request.device_id} registered successfully")
         return DeviceResponse(**device.to_dict())
+
     except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== Specific routes BEFORE generic ones ====================
+@router.post("/{device_id}/readings", response_model=DeviceResponse)
+async def update_device_reading(
+        device_id: str,
+        request: UpdateReadingRequest,
+        service: DeviceService = Depends(get_device_service)
+):
+    """
+    Update device reading from ESP32.
+    Data is stored in-memory and sent to backend asynchronously.
+    """
+    try:
+        logger.info(f"Updating reading for device {device_id}: {request.pressure}%")
+
+        device = await service.update_device_reading(
+            device_id=device_id,
+            pressure=request.pressure,
+            threshold=request.threshold
+        )
+
+        logger.info(f"Reading updated for {device_id}: Status={device.status.value}")
+        return DeviceResponse(**device.to_dict())
+
+    except ValueError as e:
+        logger.error(f"Device not found: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/status/available", response_model=List[DeviceResponse])
 async def get_available_devices(
         branch_id: Optional[str] = Query(None, description="Filter by branch ID"),
         service: DeviceService = Depends(get_device_service)
 ):
-    """Get all available devices"""
+    """Get all available devices from in-memory storage"""
     devices = await service.get_available_devices(branch_id)
     return [DeviceResponse(**d.to_dict()) for d in devices]
 
@@ -80,9 +141,23 @@ async def get_occupied_devices(
         branch_id: Optional[str] = Query(None, description="Filter by branch ID"),
         service: DeviceService = Depends(get_device_service)
 ):
-    """Get all occupied devices"""
+    """Get all occupied devices from in-memory storage"""
     devices = await service.get_occupied_devices(branch_id)
     return [DeviceResponse(**d.to_dict()) for d in devices]
+
+
+@router.get("/health/backend", response_model=HealthResponse)
+async def check_backend_health(
+        service: DeviceService = Depends(get_device_service)
+):
+    """Check if backend is reachable"""
+    backend_ok = await service.check_backend_health()
+
+    return HealthResponse(
+        edge_api="online",
+        backend=_backend_url or "not_configured",
+        backend_reachable=backend_ok
+    )
 
 
 @router.post("/maintenance/check-offline", response_model=List[DeviceResponse])
@@ -95,32 +170,12 @@ async def check_offline_devices(
     return [DeviceResponse(**d.to_dict()) for d in devices]
 
 
-# ==================== Path parameter routes ====================
-
-@router.post("/{device_id}/readings", response_model=DeviceResponse)
-async def update_device_reading(
-        device_id: str,
-        request: UpdateReadingRequest,
-        service: DeviceService = Depends(get_device_service)
-):
-    """Update device reading (used by ESP32)"""
-    try:
-        device = await service.update_device_reading(
-            device_id=device_id,
-            pressure=request.pressure,
-            threshold=request.threshold
-        )
-        return DeviceResponse(**device.to_dict())
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
 @router.get("/{device_id}", response_model=DeviceResponse)
 async def get_device(
         device_id: str,
         service: DeviceService = Depends(get_device_service)
 ):
-    """Get device information by ID"""
+    """Get device information by ID from in-memory storage"""
     device = await service.get_device(device_id)
     if not device:
         raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
@@ -132,21 +187,19 @@ async def delete_device(
         device_id: str,
         service: DeviceService = Depends(get_device_service)
 ):
-    """Delete a device from the system"""
+    """Delete a device from in-memory storage"""
     deleted = await service.delete_device(device_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
     return None
 
 
-# ==================== Generic list route LAST ====================
-
 @router.get("/", response_model=List[DeviceResponse])
 async def get_all_devices(
         branch_id: Optional[str] = Query(None, description="Filter by branch ID"),
         service: DeviceService = Depends(get_device_service)
 ):
-    """Get all devices or filter by branch"""
+    """Get all devices from in-memory storage or filter by branch"""
     if branch_id:
         devices = await service.get_devices_by_branch(branch_id)
     else:
