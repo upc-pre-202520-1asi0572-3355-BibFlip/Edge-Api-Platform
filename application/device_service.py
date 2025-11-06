@@ -1,5 +1,5 @@
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from domain.model.device import Device, DeviceId, DeviceType, DeviceStatus, Location
 from domain.repository.device_repository import DeviceRepository
 
@@ -86,7 +86,7 @@ class DeviceService:
         """Check and mark devices as offline if no updates"""
         all_devices = await self._repository.find_all()
         offline_devices = []
-        cutoff_time = datetime.utcnow() - timedelta(minutes=timeout_minutes)
+        cutoff_time = datetime.now(UTC) - timedelta(minutes=timeout_minutes)
 
         for device in all_devices:
             if device.last_update < cutoff_time and device.status != DeviceStatus.OFFLINE:

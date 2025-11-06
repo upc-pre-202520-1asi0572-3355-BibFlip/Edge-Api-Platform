@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Optional
 
@@ -36,7 +36,7 @@ class PressureReading:
         if self.value < 0 or self.value > 100:
             raise ValueError("Pressure must be between 0 and 100")
         if self.timestamp is None:
-            object.__setattr__(self, 'timestamp', datetime.utcnow())
+            object.__setattr__(self, 'timestamp', datetime.now(UTC))
 
 
 @dataclass(frozen=True)
@@ -61,12 +61,12 @@ class Device:
 
     def __post_init__(self):
         if self.last_update is None:
-            self.last_update = datetime.utcnow()
+            self.last_update = datetime.now(UTC)
 
     def update_reading(self, pressure: float, threshold: float = 30.0):
         """Update device reading and determine status"""
         self.last_reading = PressureReading(value=pressure)
-        self.last_update = datetime.utcnow()
+        self.last_update = datetime.now(UTC)
 
         # Determine status based on pressure threshold
         if pressure >= threshold:
@@ -77,12 +77,12 @@ class Device:
     def mark_offline(self):
         """Mark device as offline"""
         self.status = DeviceStatus.OFFLINE
-        self.last_update = datetime.utcnow()
+        self.last_update = datetime.now(UTC)
 
     def mark_error(self):
         """Mark device with error status"""
         self.status = DeviceStatus.ERROR
-        self.last_update = datetime.utcnow()
+        self.last_update = datetime.now(UTC)
 
     def to_dict(self):
         return {
