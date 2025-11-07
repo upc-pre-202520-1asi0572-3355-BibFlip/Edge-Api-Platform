@@ -111,7 +111,7 @@ class DeviceService:
         """Sync cubicle status with backend (background task)"""
         try:
             # Extract cubicle_id from device_id
-            # Ejemplo: "ESP32_CUBICLE_5" -> cubicle_id = 5
+            # Ejemplo: "ESP32_CUBICLE_1" -> cubicle_id = 1
             cubicle_id = self._extract_cubicle_id(device_id)
 
             if cubicle_id is None:
@@ -134,10 +134,6 @@ class DeviceService:
     def _extract_cubicle_id(device_id: str) -> Optional[int]:
         """
         Extract cubicle ID from device ID.
-        Examples:
-        - "ESP32_CUBICLE_5" -> 5
-        - "CUBICLE_10" -> 10
-        - "5" -> 5
         """
         try:
             # Try to extract number from string
