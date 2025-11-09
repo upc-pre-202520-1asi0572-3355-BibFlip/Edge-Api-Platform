@@ -23,23 +23,23 @@ class BackendClient:
         if self.client:
             await self.client.aclose()
 
-    async def update_cubicle_status(
+    async def update_availability_slot_status(
             self,
             cubicle_id: int,
             status: str
     ) -> bool:
         """
-        Actualiza el status del cubículo en el backend.
-        Solo envia el status (AVAILABLE or OCCUPIED).
+        Actualiza el status del AvailabilitySlot actual del cubiculo.
+        Status: AVAILABLE, RESERVED, OCCUPIED
         """
         try:
             payload = {
                 "status": status
             }
 
-            url = f"{self.backend_url}/api/v1/cubicles/{cubicle_id}/status"
+            url = f"{self.backend_url}/api/v1/cubicles/{cubicle_id}/availability-slot/status"
 
-            logger.info(f"Updating cubicle status in backend: {url}")
+            logger.info(f"Updating availability slot status in backend: {url}")
             logger.debug(f"Payload: {payload}")
 
             if not self.client:
@@ -48,7 +48,7 @@ class BackendClient:
             response = await self.client.patch(url, json=payload)
 
             if response.status_code in [200, 201]:
-                logger.info(f"Successfully updated status for cubicle {cubicle_id} to {status}")
+                logger.info(f"Successfully updated availability slot status for cubicle {cubicle_id} to {status}")
                 return True
             else:
                 logger.warning(
@@ -57,13 +57,13 @@ class BackendClient:
                 return False
 
         except httpx.TimeoutException:
-            logger.error(f"Timeout updating status for cubicle {cubicle_id} to backend")
+            logger.error(f"Timeout updating availability slot status for cubicle {cubicle_id}")
             return False
         except httpx.RequestError as e:
-            logger.error(f"Request error updating status for cubicle {cubicle_id}: {str(e)}")
+            logger.error(f"Request error updating availability slot status for cubicle {cubicle_id}: {str(e)}")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error updating status for cubicle {cubicle_id}: {str(e)}")
+            logger.error(f"Unexpected error updating availability slot status for cubicle {cubicle_id}: {str(e)}")
             return False
 
     async def register_device_in_backend(

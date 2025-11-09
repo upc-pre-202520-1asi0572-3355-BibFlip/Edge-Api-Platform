@@ -108,32 +108,36 @@ class DeviceService:
             device_id: str,
             status: str
     ):
-        """Sync cubicle status with backend (background task)"""
+        """Sync availability slot status with backend (background task)"""
         try:
             # Extract cubicle_id from device_id
-            # Ejemplo: "ESP32_CUBICLE_1" -> cubicle_id = 1
+            # Ejemplo: "CUBICLE_5" -> cubicle_id = 5
             cubicle_id = self._extract_cubicle_id(device_id)
 
             if cubicle_id is None:
                 logger.warning(f"Could not extract cubicle_id from device_id: {device_id}")
                 return
 
-            # Map Edge API status to Backend status
+            # Map Edge API status to Backend AvailabilitySlot status
             backend_status = self._map_status_to_backend(status)
 
             async with BackendClient(self._backend_url) as client:
-                success = await client.update_cubicle_status(cubicle_id, backend_status)
+                success = await client.update_availability_slot_status(cubicle_id, backend_status)
                 if success:
-                    logger.info(f"Successfully synced status for cubicle {cubicle_id} to backend")
+                    logger.info(f"Successfully synced availability slot status for cubicle {cubicle_id} to backend")
                 else:
-                    logger.warning(f"Failed to sync status for cubicle {cubicle_id} to backend")
+                    logger.warning(f"Failed to sync availability slot status for cubicle {cubicle_id} to backend")
         except Exception as e:
-            logger.error(f"Error syncing status to backend: {str(e)}")
+            logger.error(f"Error syncing availability slot status to backend: {str(e)}")
 
     @staticmethod
     def _extract_cubicle_id(device_id: str) -> Optional[int]:
         """
         Extract cubicle ID from device ID.
+        Examples:
+        - "ESP32_CUBICLE_5" -> 5
+        - "CUBICLE_10" -> 10
+        - "5" -> 5
         """
         try:
             # Try to extract number from string
@@ -149,17 +153,17 @@ class DeviceService:
     @staticmethod
     def _map_status_to_backend(edge_status: str) -> str:
         """
-        Map Edge API status to Backend status.
+        Map Edge API status to Backend booking status.
         Edge API: available, occupied, offline, error
-        Backend: AVAILABLE, OCCUPIED, OFFLINE, ERROR
+        Backend: IN_USE, NOT_IN_USE
         """
         status_map = {
-            "available": "AVAILABLE",
-            "occupied": "OCCUPIED",
-            "offline": "OFFLINE",
-            "error": "ERROR"
+            "available": "NOT_IN_USE",
+            "occupied": "IN_USE",
+            "offline": "NOT_IN_USE",
+            "error": "NOT_IN_USE"
         }
-        return status_map.get(edge_status.lower(), "AVAILABLE")
+        return status_map.get(edge_status.lower(), "NOT_IN_USE")
 
     async def get_device(self, device_id: str) -> Optional[Device]:
         """Get device by ID"""
