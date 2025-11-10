@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from domain.model.device import Device, DeviceId, DeviceStatus
+from domain.model.aggregates.device import Device, DeviceId, DeviceStatus
 
 
 class DeviceRepository(ABC):
@@ -39,4 +39,9 @@ class DeviceRepository(ABC):
     @abstractmethod
     async def exists(self, device_id: DeviceId) -> bool:
         """Check if device exists"""
+        pass
+
+    @abstractmethod
+    async def find_by_cubicle_id(self, cubicle_id: int) -> Optional[Device]:
+        """Find device assigned to a cubicle"""
         pass

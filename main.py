@@ -1,6 +1,8 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from interface.api.device_controller import router as device_router, set_backend_url
+from infrastructure.persistence.configuration.database_configuration import init_db, close_db
 import os
 import logging
 
@@ -15,21 +17,39 @@ logger = logging.getLogger(__name__)
 # Backend configuration
 BACKEND_URL = os.environ.get(
     "BACKEND_URL",
-    "https://bibflip-backend.azurewebsites.net"  # Tu backend Spring Boot
+    "https://bibflip-api-platform.azurewebsites.net"
 )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Application lifecycle: startup and shutdown"""
+    logger.info("=" * 60)
+    logger.info("Initializing database...")
+    await init_db()
+    logger.info("Database initialized successfully")
+    logger.info("=" * 60)
+
+    yield
+
+    logger.info("Closing database...")
+    await close_db()
+    logger.info("Database closed")
+
 
 # Create FastAPI app
 app = FastAPI(
     title="BibFlip IoT Edge API",
-    description="Edge API for IoT chair sensors with backend synchronization",
+    description="Edge API for IoT chair sensors with PostgreSQL persistence",
     version="2.0.0",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
+    lifespan=lifespan
 )
 
 # CORS middleware
 app.add_middleware(
-    CORSMiddleware,
+    CORSMiddleware, # type: ignore
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],

@@ -1,20 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime, UTC
-from enum import Enum
 from typing import Optional
 
-
-class DeviceStatus(Enum):
-    AVAILABLE = "available"
-    OCCUPIED = "occupied"
-    OFFLINE = "offline"
-    ERROR = "error"
-
-
-class DeviceType(Enum):
-    CHAIR_SENSOR = "chair_sensor"
-    TABLE_SENSOR = "table_sensor"
-    ENVIRONMENTAL = "environmental"
+from domain.model.valueobjects.device_status import DeviceStatus
+from domain.model.valueobjects.device_type import DeviceType
 
 
 @dataclass(frozen=True)
@@ -58,6 +47,7 @@ class Device:
     location: Location
     last_reading: Optional[PressureReading] = None
     last_update: datetime = None
+    cubicle_id: Optional[int] = None
 
     def __post_init__(self):
         if self.last_update is None:
@@ -84,6 +74,18 @@ class Device:
         self.status = DeviceStatus.ERROR
         self.last_update = datetime.now(UTC)
 
+    def assign_to_cubicle(self, cubicle_id: int):
+        """Assign device to a cubicle"""
+        if cubicle_id <= 0:
+            raise ValueError("Cubicle ID must be positive")
+        self.cubicle_id = cubicle_id
+        self.last_update = datetime.now(UTC)
+
+    def unassign_from_cubicle(self):
+        """Remove cubicle assignment"""
+        self.cubicle_id = None
+        self.last_update = datetime.now(UTC)
+
     def to_dict(self):
         return {
             "id": self.id.value,
@@ -94,6 +96,7 @@ class Device:
                 "zone": self.location.zone,
                 "position": self.location.position
             },
+            "cubicle_id": self.cubicle_id,  # ← AGREGAR ESTA LÍNEA
             "last_reading": {
                 "value": self.last_reading.value,
                 "unit": self.last_reading.unit,

@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime, timedelta, UTC
-from domain.model.device import Device, DeviceId, DeviceType, DeviceStatus, Location
+from domain.model.aggregates.device import Device, DeviceId, DeviceType, DeviceStatus, Location
 from domain.repository.device_repository import DeviceRepository
 from infrastructure.http.backend_client import BackendClient
 import logging
@@ -155,15 +155,15 @@ class DeviceService:
         """
         Map Edge API status to Backend booking status.
         Edge API: available, occupied, offline, error
-        Backend: IN_USE, NOT_IN_USE
+        Backend: AVAILABLE, RESERVED, OCCUPIED
         """
         status_map = {
-            "available": "NOT_IN_USE",
-            "occupied": "IN_USE",
-            "offline": "NOT_IN_USE",
-            "error": "NOT_IN_USE"
+            "available": "AVAILABLE",
+            "occupied": "OCCUPIED",
+            "offline": "AVAILABLE",
+            "error": "AVAILABLE"
         }
-        return status_map.get(edge_status.lower(), "NOT_IN_USE")
+        return status_map.get(edge_status.lower(), "AVAILABLE")
 
     async def get_device(self, device_id: str) -> Optional[Device]:
         """Get device by ID"""
@@ -222,3 +222,38 @@ class DeviceService:
         except Exception as e:
             logger.error(f"Backend health check failed: {str(e)}")
             return False
+
+    async def assign_device_to_cubicle(
+            self,
+            device_id: str,
+            cubicle_id: int
+    ) -> Device:
+        """Assign a device to a cubicle"""
+        device_id_vo = DeviceId(device_id)
+        device = await self._repository.find_by_id(device_id_vo)
+
+        if not device:
+            raise ValueError(f"Device {device_id} not found")
+
+        # Check if cubicle already has a device assigned
+        existing_device = await self._repository.find_by_cubicle_id(cubicle_id)
+        if existing_device and existing_device.id.value != device_id:
+            raise ValueError(f"Cubicle {cubicle_id} already has device {existing_device.id.value} assigned")
+
+        device.assign_to_cubicle(cubicle_id)
+        return await self._repository.save(device)
+
+    async def unassign_device_from_cubicle(self, device_id: str) -> Device:
+        """Remove cubicle assignment from device"""
+        device_id_vo = DeviceId(device_id)
+        device = await self._repository.find_by_id(device_id_vo)
+
+        if not device:
+            raise ValueError(f"Device {device_id} not found")
+
+        device.unassign_from_cubicle()
+        return await self._repository.save(device)
+
+    async def get_device_by_cubicle(self, cubicle_id: int) -> Optional[Device]:
+        """Get device assigned to a specific cubicle"""
+        return await self._repository.find_by_cubicle_id(cubicle_id)
