@@ -1,10 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime, UTC
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from domain.model.valueobjects.device_status import DeviceStatus
 from domain.model.valueobjects.device_type import DeviceType
 
+# Zona horaria de Lima/Perú (UTC-5)
+LIMA_TZ = timezone(timedelta(hours=-5))
 
 @dataclass(frozen=True)
 class DeviceId:
@@ -25,7 +27,7 @@ class PressureReading:
         if self.value < 0 or self.value > 100:
             raise ValueError("Pressure must be between 0 and 100")
         if self.timestamp is None:
-            object.__setattr__(self, 'timestamp', datetime.now(UTC))
+            object.__setattr__(self, 'timestamp', datetime.now(LIMA_TZ))
 
 
 @dataclass(frozen=True)
@@ -51,12 +53,12 @@ class Device:
 
     def __post_init__(self):
         if self.last_update is None:
-            self.last_update = datetime.now(UTC)
+            self.last_update = datetime.now(LIMA_TZ)
 
     def update_reading(self, pressure: float, threshold: float = 30.0):
         """Update device reading and determine status"""
         self.last_reading = PressureReading(value=pressure)
-        self.last_update = datetime.now(UTC)
+        self.last_update = datetime.now(LIMA_TZ)
 
         # Determine status based on pressure threshold
         if pressure >= threshold:
@@ -67,24 +69,24 @@ class Device:
     def mark_offline(self):
         """Mark device as offline"""
         self.status = DeviceStatus.OFFLINE
-        self.last_update = datetime.now(UTC)
+        self.last_update = datetime.now(LIMA_TZ)
 
     def mark_error(self):
         """Mark device with error status"""
         self.status = DeviceStatus.ERROR
-        self.last_update = datetime.now(UTC)
+        self.last_update = datetime.now(LIMA_TZ)
 
     def assign_to_cubicle(self, cubicle_id: int):
         """Assign device to a cubicle"""
         if cubicle_id <= 0:
             raise ValueError("Cubicle ID must be positive")
         self.cubicle_id = cubicle_id
-        self.last_update = datetime.now(UTC)
+        self.last_update = datetime.now(LIMA_TZ)
 
     def unassign_from_cubicle(self):
         """Remove cubicle assignment"""
         self.cubicle_id = None
-        self.last_update = datetime.now(UTC)
+        self.last_update = datetime.now(LIMA_TZ)
 
     def to_dict(self):
         return {
