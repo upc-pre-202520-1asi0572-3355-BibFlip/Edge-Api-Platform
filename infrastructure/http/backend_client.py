@@ -66,48 +66,6 @@ class BackendClient:
             logger.error(f"Unexpected error updating availability slot status for cubicle {cubicle_id}: {str(e)}")
             return False
 
-    async def register_device_in_backend(
-            self,
-            device_id: str,
-            device_type: str,
-            branch_id: str,
-            zone: str,
-            position: str
-    ) -> bool:
-        """
-        Registra dispositivo en el backend.
-        """
-        try:
-            payload = {
-                "deviceId": device_id,
-                "deviceType": device_type,
-                "branchId": branch_id,
-                "zone": zone,
-                "position": position
-            }
-
-            url = f"{self.backend_url}/api/v1/devices"
-
-            logger.info(f"Registering device in backend: {url}")
-
-            if not self.client:
-                self.client = httpx.AsyncClient(timeout=self.timeout)
-
-            response = await self.client.post(url, json=payload)
-
-            if response.status_code in [200, 201]:
-                logger.info(f"Successfully registered device {device_id} in backend")
-                return True
-            else:
-                logger.warning(
-                    f"Backend returned status {response.status_code} for device registration: {response.text}"
-                )
-                return False
-
-        except Exception as e:
-            logger.error(f"Error registering device in backend: {str(e)}")
-            return False
-
     async def health_check(self) -> bool:
         """
         Verifica si el backend esta disponible.

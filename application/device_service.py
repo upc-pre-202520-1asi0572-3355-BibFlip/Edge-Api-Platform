@@ -29,7 +29,7 @@ class DeviceService:
             zone: str,
             position: str
     ) -> Device:
-        """Register a new IoT device and sync with backend"""
+        """Register a new IoT device"""
         device_id_vo = DeviceId(device_id)
 
         # Check if device already exists
@@ -49,33 +49,10 @@ class DeviceService:
             )
         )
 
-        # Save in Edge API (in-memory)
+        # Save in Edge API (PostgreSQL)
         saved_device = await self._repository.save(device)
 
-        # Sync with backend asynchronously (non-blocking)
-        if self._backend_enabled:
-            asyncio.create_task(self._sync_device_registration(
-                device_id, device_type, branch_id, zone, position
-            ))
-
         return saved_device
-
-    async def _sync_device_registration(
-            self,
-            device_id: str,
-            device_type: str,
-            branch_id: str,
-            zone: str,
-            position: str
-    ):
-        """Sync device registration with backend (background task)"""
-        try:
-            async with BackendClient(self._backend_url) as client:
-                await client.register_device_in_backend(
-                    device_id, device_type, branch_id, zone, position
-                )
-        except Exception as e:
-            logger.error(f"Failed to sync device registration to backend: {str(e)}")
 
     async def update_device_reading(
             self,
@@ -96,30 +73,29 @@ class DeviceService:
 
         # Sync status with backend asynchronously (non-blocking)
         if self._backend_enabled:
-            asyncio.create_task(self._sync_cubicle_status(
-                device_id,
-                saved_device.status.value
-            ))
+            asyncio.create_task(self._sync_cubicle_status(saved_device))
 
         return saved_device
 
-    async def _sync_cubicle_status(
-            self,
-            device_id: str,
-            status: str
-    ):
+    async def _sync_cubicle_status(self, device: Device):
         """Sync availability slot status with backend (background task)"""
         try:
-            # Extract cubicle_id from device_id
-            # Ejemplo: "CUBICLE_5" -> cubicle_id = 5
-            cubicle_id = self._extract_cubicle_id(device_id)
-
-            if cubicle_id is None:
-                logger.warning(f"Could not extract cubicle_id from device_id: {device_id}")
+            # CORRECCIÓN: Usar el cubicle_id asignado al dispositivo
+            if device.cubicle_id is None:
+                logger.warning(
+                    f"Device {device.id.value} not assigned to any cubicle. "
+                    f"Skipping backend sync. Use PATCH /devices/{{id}}/assign-cubicle first."
+                )
                 return
 
+            cubicle_id = device.cubicle_id
+
             # Map Edge API status to Backend AvailabilitySlot status
-            backend_status = self._map_status_to_backend(status)
+            backend_status = self._map_status_to_backend(device.status.value)
+
+            logger.info(
+                f"Syncing device {device.id.value} → cubicle {cubicle_id} → status {backend_status}"
+            )
 
             async with BackendClient(self._backend_url) as client:
                 success = await client.update_availability_slot_status(cubicle_id, backend_status)
@@ -131,35 +107,18 @@ class DeviceService:
             logger.error(f"Error syncing availability slot status to backend: {str(e)}")
 
     @staticmethod
-    def _extract_cubicle_id(device_id: str) -> Optional[int]:
-        """
-        Extract cubicle ID from device ID.
-        Examples:
-        - "ESP32_CUBICLE_5" -> 5
-        - "CUBICLE_10" -> 10
-        - "5" -> 5
-        """
-        try:
-            # Try to extract number from string
-            import re
-            match = re.search(r'(\d+)', device_id)
-            if match:
-                return int(match.group(1))
-            return None
-        except Exception as e:
-            logger.error(f"Error extracting cubicle_id: {str(e)}")
-            return None
-
-    @staticmethod
     def _map_status_to_backend(edge_status: str) -> str:
         """
         Map Edge API status to Backend booking status.
         Edge API: available, occupied, offline, error
-        Backend: AVAILABLE, RESERVED, OCCUPIED
+        Backend: AVAILABLE, RESERVED (only 2 states)
+
+        Note: We map 'occupied' to 'RESERVED' because the backend
+        doesn't have a separate OCCUPIED state yet.
         """
         status_map = {
             "available": "AVAILABLE",
-            "occupied": "OCCUPIED",
+            "occupied": "RESERVED",  # ← CAMBIADO: OCCUPIED → RESERVED
             "offline": "AVAILABLE",
             "error": "AVAILABLE"
         }
@@ -241,7 +200,11 @@ class DeviceService:
             raise ValueError(f"Cubicle {cubicle_id} already has device {existing_device.id.value} assigned")
 
         device.assign_to_cubicle(cubicle_id)
-        return await self._repository.save(device)
+        saved_device = await self._repository.save(device)
+
+        logger.info(f"Device {device_id} assigned to cubicle {cubicle_id}")
+
+        return saved_device
 
     async def unassign_device_from_cubicle(self, device_id: str) -> Device:
         """Remove cubicle assignment from device"""

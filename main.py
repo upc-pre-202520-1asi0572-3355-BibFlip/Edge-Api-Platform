@@ -5,6 +5,15 @@ from interface.api.device_controller import router as device_router, set_backend
 from infrastructure.persistence.configuration.database_configuration import init_db, close_db
 import os
 import logging
+import sys
+import asyncio
+
+
+# Configurar el event loop correcto ANTES de cualquier import asíncrono
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    logging.info("Windows detected: Using WindowsSelectorEventLoopPolicy for async operations")
+
 
 # Configure logging
 logging.basicConfig(
