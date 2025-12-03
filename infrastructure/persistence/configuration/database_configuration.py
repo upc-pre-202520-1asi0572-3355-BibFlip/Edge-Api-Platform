@@ -1,6 +1,7 @@
 import os
 from typing import Any, AsyncGenerator
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 import logging
@@ -22,6 +23,12 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_recycle=3600
 )
+
+@event.listens_for(engine.sync_engine, "connect")
+def set_timezone(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("SET TIME ZONE 'America/Lima'")
+    cursor.close()
 
 # Session factory
 AsyncSessionLocal = async_sessionmaker(
