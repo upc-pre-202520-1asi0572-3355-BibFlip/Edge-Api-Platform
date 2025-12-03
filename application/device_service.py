@@ -67,20 +67,28 @@ class DeviceService:
         if not device:
             raise ValueError(f"Device {device_id} not found")
 
+        # Guardar estado anterior
+        previous_status = device.status
+
         # Update device status based on pressure
         device.update_reading(pressure, threshold)
         saved_device = await self._repository.save(device)
 
         # Sync status with backend asynchronously (non-blocking)
         if self._backend_enabled:
-            asyncio.create_task(self._sync_cubicle_status(saved_device))
+            asyncio.create_task(
+                self._sync_cubicle_status(saved_device, previous_status)
+            )
 
         return saved_device
 
-    async def _sync_cubicle_status(self, device: Device):
-        """Sync availability slot status with backend (background task)"""
+    async def _sync_cubicle_status(self, device: Device, previous_status: DeviceStatus):
+        """
+        Sync availability slot status with backend (background task).
+        Si el estado cambia de OCCUPIED a AVAILABLE, cancela el booking activo.
+        """
         try:
-            # CORRECCIÓN: Usar el cubicle_id asignado al dispositivo
+            # Verificar que el device esté asignado a un cubículo
             if device.cubicle_id is None:
                 logger.warning(
                     f"Device {device.id.value} not assigned to any cubicle. "
@@ -89,22 +97,52 @@ class DeviceService:
                 return
 
             cubicle_id = device.cubicle_id
-
-            # Map Edge API status to Backend AvailabilitySlot status
-            backend_status = self._map_status_to_backend(device.status.value)
+            current_status = device.status.value
+            backend_status = self._map_status_to_backend(current_status)
 
             logger.info(
-                f"Syncing device {device.id.value} → cubicle {cubicle_id} → status {backend_status}"
+                f"Syncing device {device.id.value} → cubicle {cubicle_id} → "
+                f"status change: {previous_status.value} → {current_status}"
             )
 
             async with BackendClient(self._backend_url) as client:
+                # IMPORTANTE: Si el estado cambió a AVAILABLE, cancelar el booking activo
+                if (previous_status == DeviceStatus.OCCUPIED and
+                        device.status == DeviceStatus.AVAILABLE):
+
+                    logger.info(f"🔓 Cubicle {cubicle_id} is now AVAILABLE. Cancelling active booking...")
+
+                    # Obtener fecha y hora actual en Lima (UTC-5)
+                    from datetime import timezone, timedelta
+                    LIMA_TZ = timezone(timedelta(hours=-5))
+                    now_lima = datetime.now(LIMA_TZ)
+
+                    date_str = now_lima.strftime("%Y-%m-%d")
+                    time_str = now_lima.strftime("%H:%M:%S")
+
+                    cancel_success = await client.cancel_current_booking(
+                        cubicle_id,
+                        date=date_str,
+                        time=time_str
+                    )
+
+                    if cancel_success:
+                        logger.info(f"✓ Booking cancelled successfully for cubicle {cubicle_id}")
+                    else:
+                        logger.warning(
+                            f"⚠ Could not cancel booking for cubicle {cubicle_id} (might be already available)")
+
+                # Actualizar el estado del availability slot
                 success = await client.update_availability_slot_status(cubicle_id, backend_status)
+
                 if success:
-                    logger.info(f"Successfully synced availability slot status for cubicle {cubicle_id} to backend")
+                    logger.info(
+                        f"✓ Successfully synced availability slot status for cubicle {cubicle_id} to {backend_status}")
                 else:
-                    logger.warning(f"Failed to sync availability slot status for cubicle {cubicle_id} to backend")
+                    logger.warning(f"⚠ Failed to sync availability slot status for cubicle {cubicle_id}")
+
         except Exception as e:
-            logger.error(f"Error syncing availability slot status to backend: {str(e)}")
+            logger.error(f"❌ Error syncing cubicle status to backend: {str(e)}", exc_info=True)
 
     @staticmethod
     def _map_status_to_backend(edge_status: str) -> str:
@@ -112,13 +150,10 @@ class DeviceService:
         Map Edge API status to Backend booking status.
         Edge API: available, occupied, offline, error
         Backend: AVAILABLE, RESERVED (only 2 states)
-
-        Note: We map 'occupied' to 'RESERVED' because the backend
-        doesn't have a separate OCCUPIED state yet.
         """
         status_map = {
             "available": "AVAILABLE",
-            "occupied": "RESERVED",  # ← CAMBIADO: OCCUPIED → RESERVED
+            "occupied": "RESERVED",
             "offline": "AVAILABLE",
             "error": "AVAILABLE"
         }

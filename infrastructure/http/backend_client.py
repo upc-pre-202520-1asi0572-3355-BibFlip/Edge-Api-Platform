@@ -1,5 +1,6 @@
-import httpx
 import logging
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -7,7 +8,7 @@ logger = logging.getLogger(__name__)
 class BackendClient:
     """
     Cliente HTTP para comunicar Edge API con Backend Spring Boot.
-    Envia datos de forma asíncrona para no bloquear el Edge API.
+    Envía datos de forma asíncrona para no bloquear el Edge API.
     """
 
     def __init__(self, backend_url: str, timeout: float = 10.0):
@@ -29,8 +30,8 @@ class BackendClient:
             status: str
     ) -> bool:
         """
-        Actualiza el status del AvailabilitySlot actual del cubiculo.
-        Status: AVAILABLE, RESERVED, OCCUPIED
+        Actualiza el status del AvailabilitySlot actual del cubículo.
+        Status: AVAILABLE, RESERVED
         """
         try:
             payload = {
@@ -66,9 +67,66 @@ class BackendClient:
             logger.error(f"Unexpected error updating availability slot status for cubicle {cubicle_id}: {str(e)}")
             return False
 
+    async def cancel_current_booking(
+            self,
+            cubicle_id: int,
+            date: str = None,
+            time: str = None
+    ) -> bool:
+        """
+        Cancela el booking activo actual de un cubículo.
+
+        Args:
+            cubicle_id: ID del cubículo
+            date: Fecha en formato YYYY-MM-DD (opcional, usa fecha actual si no se proporciona)
+            time: Hora en formato HH:MM:SS (opcional, usa hora actual si no se proporciona)
+
+        Returns:
+            True si se canceló exitosamente o no había booking
+            False si hubo error
+        """
+        try:
+            # Construir URL con parámetros opcionales
+            url = f"{self.backend_url}/api/v1/bookings/cubicle/{cubicle_id}/current"
+
+            params = {}
+            if date:
+                params['date'] = date
+            if time:
+                params['time'] = time
+
+            logger.info(f"Cancelling current booking for cubicle {cubicle_id} (date: {date}, time: {time})")
+
+            if not self.client:
+                self.client = httpx.AsyncClient(timeout=self.timeout)
+
+            response = await self.client.delete(url, params=params)
+
+            if response.status_code == 200:
+                logger.info(f"✓ Successfully cancelled current booking for cubicle {cubicle_id}")
+                return True
+            elif response.status_code == 404:
+                logger.info(f"✓ No active booking found for cubicle {cubicle_id} (already available)")
+                return True  # No hay booking activo, es válido
+            else:
+                logger.warning(
+                    f"Backend returned status {response.status_code} when cancelling booking for cubicle {cubicle_id}: {response.text}"
+                )
+                return False
+
+        except httpx.TimeoutException:
+            logger.error(f"Timeout cancelling booking for cubicle {cubicle_id}")
+            return False
+        except httpx.RequestError as e:
+            logger.error(f"Request error cancelling booking for cubicle {cubicle_id}: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error cancelling booking for cubicle {cubicle_id}: {str(e)}")
+            return False
+
     async def health_check(self) -> bool:
         """
-        Verifica si el backend esta disponible.
+        Verifica si el backend está disponible.
         """
         try:
             url = f"{self.backend_url}/actuator/health"
