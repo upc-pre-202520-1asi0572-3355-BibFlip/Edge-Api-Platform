@@ -2,8 +2,14 @@ import enum
 
 from sqlalchemy import Column, String, Integer, Float, DateTime, Enum as SQLEnum
 from sqlalchemy.sql import func
-
+from datetime import datetime, timezone, timedelta
 from infrastructure.persistence.configuration.database_configuration import Base
+
+
+LIMA_TZ = timezone(timedelta(hours=-5))
+
+def lima_now():
+    return datetime.now(timezone.utc).astimezone(LIMA_TZ)
 
 
 class DeviceStatusEnum(str, enum.Enum):
@@ -42,8 +48,8 @@ class DeviceModel(Base):
     last_pressure_timestamp = Column(DateTime, nullable=True)
 
     # Timestamps
-    last_update = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    last_update = Column(DateTime(timezone=True), nullable=False, default=lima_now, onupdate=lima_now)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lima_now)
 
     def __repr__(self):
         return f"<Device(id='{self.id}', type='{self.type}', status='{self.status}', cubicle_id={self.cubicle_id})>"
