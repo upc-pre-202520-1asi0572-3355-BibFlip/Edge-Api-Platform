@@ -107,8 +107,7 @@ class DeviceService:
 
             async with BackendClient(self._backend_url) as client:
                 # IMPORTANTE: Si el estado cambió a AVAILABLE, cancelar el booking activo
-                if (previous_status == DeviceStatus.OCCUPIED and
-                        device.status == DeviceStatus.AVAILABLE):
+                if device.status == DeviceStatus.AVAILABLE:
 
                     logger.info(f"🔓 Cubicle {cubicle_id} is now AVAILABLE. Cancelling active booking...")
 
